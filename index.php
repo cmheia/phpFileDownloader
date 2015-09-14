@@ -449,7 +449,7 @@ function setDownloaded(len)
 // 设置语言
 function setlang()
 {
-	if (confirm("Switch to new language: "+lang_form.newlang.value))
+	if (confirm("Switch to new language: "+lang_form.newlang.options[lang_form.newlang.selectedIndex].innerHTML))
 	{
 		lang_form.submit();
 	}
@@ -457,7 +457,7 @@ function setlang()
 function autoresize()
 {
 	$("input_form").style.display="";
-	$("url").style.width=$("query").parentNode.clientWidth-$("query").clientWidth*2+"px";
+	$("url").style.width=$("query").parentNode.clientWidth-$("query").clientWidth*3+"px";
 }
 <?php
 } // $_SESSION['login'] == true
@@ -786,11 +786,10 @@ if ($_SESSION['login'] == true) {
 <div class="lang">
 	<form method="post" name="lang_form" id="lang_form" align="center">
 		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
-		<select name="newlang">
-			<option value="cn">简体中文</option>
-			<option value="en">English</option>
+		<select name="newlang" onchange="setlang()">
+			<option value="cn" <?php if ($lang == "cn") {echo "selected=\"selected\"";} ?>>简体中文</option>
+			<option value="en" <?php if ($lang == "en") {echo "selected=\"selected\"";} ?>>English</option>
 		</select>
-		<a href="javascript:" class="btn btn-default" id="lang" onclick="setlang()">SELECT</a>
 	</form>
 </div>
 
