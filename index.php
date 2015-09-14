@@ -163,7 +163,6 @@ function ml($tag)
 	$en['i_have_success_save'] = 'I have success save';
 	$en['write_successful'] = 'Write successful!';
 	$en['os_has_logged'] = 'The operating system has written to the log records.';
-	$en['success_or_failure'] = 'Success or failure';
 	$en['create_new_file'] = 'File does not exist; attempting to create;';
 	$en['create_failure'] = 'Create Failed';
 	$en['file_size'] = 'File Size';
@@ -185,6 +184,8 @@ function ml($tag)
 	$en['fl_size'] = 'Size';
 	$en['fl_delete'] = 'Delete';
 	$en['fl_action'] = 'Action';
+	$cn['success'] = 'Success';
+	$cn['fail'] = 'Fail';
 
 	// Chinese
 	$cn['language'] = 'Chinese';
@@ -213,12 +214,11 @@ function ml($tag)
 	$cn['i_have_success_save'] = '成功地将';
 	$cn['write_successful'] = '本次下载已记录。';
 	$cn['os_has_logged'] = '此次操作已记录。';
-	$cn['success_or_failure'] = '写入失败';
 	$cn['create_new_file'] = '日志文件不存在，新建。';
 	$cn['create_failure'] = '创建失败！';
 	$cn['file_size'] = '文件大小';
 	$cn['unknown_length'] = '未知';
-	$en['unknown_error'] = '未知错误';
+	$cn['unknown_error'] = '未知错误';
 	$cn['downloaded'] = '已经下载';
 	$cn['download_progress'] = '下载进度';
 	$cn['warn_to_url'] = '请输入完整链接。例如 http://www.example.com/file.txt';
@@ -235,6 +235,8 @@ function ml($tag)
 	$cn['fl_size'] = '大小';
 	$cn['fl_delete'] = '删除';
 	$cn['fl_action'] = '操作';
+	$cn['success'] = '成功';
+	$cn['fail'] = '失败';
 
 	$lang_ = $$lang; // 把变量$lang的值作为变量名
 	if (isset($lang_[$tag])) {
@@ -338,6 +340,19 @@ if (isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']) {
 		$todo = "list";
 	} // (isset($_POST['url']) && $_POST['url'] == $fl_key)
 
+	// 删除指定文件
+	if (isset($_POST['delete_file'])) {
+		if (substr($_POST['delete_file'], 0, 6) == "index.") {
+			die("forbidden!");
+		}
+		else {
+			$delete_result = unlink($folder . $_POST['delete_file'])? ml('success'): ml('fail');
+			echo ml('fl_delete'), " [", $_POST['delete_file'], "] ", $delete_result;
+			die();
+		}
+		$todo = "list";
+	} // (isset($_POST['delete_file']) && substr($_POST['delete_file'], 0, 6) == "index.")
+
 	// 修改密码
 	if (isset($_POST['oldkey']) && isset($_POST['newkey']) && md5($_POST['oldkey']) == $auth_pass) {
 		$auth_pass = md5($_POST['newkey']);
@@ -398,7 +413,8 @@ function request_delete(file)
 {
 	if (confirm("<?php echo ml('fl_delete');?> "+file+"?"))
 	{
-		input_form.url.value=file;
+		delete_form.delete_file.value=file;
+		delete_form.submit();
 	}
 }
 // 文件长度
@@ -441,7 +457,7 @@ function setlang()
 function autoresize()
 {
 	$("input_form").style.display="";
-	$("url").style.width=$("query").parentNode.clientWidth*0.8-$("query").clientWidth*3+"px";
+	$("url").style.width=$("query").parentNode.clientWidth-$("query").clientWidth*2+"px";
 }
 <?php
 } // $_SESSION['login'] == true
@@ -597,7 +613,9 @@ margin:10px;
 padding:3px;
 }
 div.center {
+width:80%;
 text-align:center;
+margin:0 auto;
 }
 div.list {
 max-width:80%;
@@ -738,16 +756,20 @@ if ($_SESSION['login'] == true) {
 		} // $filelist as $file
 ?>
 </table>
+</div>
 
-<form method="post" target="url" name="delete_form" id="delete_form">
-	<input name="target" value="" type="hidden" />
+<br />
+<div class="center">
+<iframe name="insideframe" width="100%" height="100" frameborder="no"></iframe>
+</div>
+<form method="post" target="insideframe" name="delete_form" id="delete_form">
+	<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
+	<input name="delete_file" value="" type="hidden" />
 </form>
 
-</div>
 <?php
 	} // $todo == "list"
 ?>
-
 <table border="1" width="80%" align="center" class="i" id="infotable" style="display:none;">
 	<tr>
 		<th><?php echo ml('file_size'); ?></th>
@@ -763,12 +785,12 @@ if ($_SESSION['login'] == true) {
 
 <div class="lang">
 	<form method="post" name="lang_form" id="lang_form" align="center">
+		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 		<select name="newlang">
 			<option value="cn">简体中文</option>
 			<option value="en">English</option>
 		</select>
 		<a href="javascript:" class="btn btn-default" id="lang" onclick="setlang()">SELECT</a>
-		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 	</form>
 </div>
 
