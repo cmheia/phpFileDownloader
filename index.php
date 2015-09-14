@@ -1,9 +1,9 @@
 <?php
-//a:12:{s:4:"lang";s:2:"cn";s:9:"auth_pass";s:32:"d41d8cd98f00b204e9800998ecf8427e";s:4:"exit";s:4:"exit";s:15:"error_reporting";i:1;s:7:"journal";s:12:"archives.log";s:6:"folder";s:5:"file/";s:14:"down_part_size";i:65536;s:12:"cookie_login";s:12:"cookie_login";s:14:"set_time_limit";i:0;s:17:"cookie_cache_time";i:259200;s:13:"avliable_lang";a:2:{i:0;s:2:"cn";i:1;s:2:"en";}s:7:"version";s:3:"0.3";}
+//a:15:{s:4:"lang";s:2:"cn";s:9:"auth_pass";s:32:"d41d8cd98f00b204e9800998ecf8427e";s:4:"exit";s:4:"exit";s:6:"fl_key";s:4:"list";s:10:"hidden_cfg";s:7:".hidden";s:13:"hide_dotfiles";i:0;s:15:"error_reporting";i:2;s:7:"journal";s:12:"archives.log";s:6:"folder";s:5:"file/";s:14:"down_part_size";i:65536;s:12:"cookie_login";s:12:"cookie_login";s:14:"set_time_limit";i:300;s:17:"cookie_cache_time";i:259200;s:13:"avliable_lang";a:2:{i:0;s:2:"cn";i:1;s:2:"en";}s:7:"version";s:3:"0.5";}
 /*--------------------------------------------------
  | PHP FILE DOWNLOADER
  +--------------------------------------------------
- | phpFileDownloader 0.4
+ | phpFileDownloader 0.5
  | Copyright (c) 2015 cmheia
  | 原始代码来源于网络
  | Rebuild By cmheia
@@ -13,7 +13,7 @@
  +--------------------------------------------------
  | OPEN SOURCE CONTRIBUTIONS
  +--------------------------------------------------
- | phpFileManager 0.9.8
+ | phpFileManager
  | By Fabricio Seger Kolling
  | Copyright (c) 2004-2013 Fabrício Seger Kolling
  | E-mail: dulldusk@gmail.com
@@ -77,7 +77,10 @@ class config
 			'lang' => 'cn', // 默认界面语言
 			'auth_pass' => md5(''), // 默认登陆口令为空
 			'exit' => 'exit', // 退出口令
-			'error_reporting' => 1,
+			'fl_key' => 'list', // 列出下载项口令
+			'hidden_cfg' => '.hidden', // 不列出文件配置列表
+			'hide_dotfiles' => 0, // 不列出隐藏文件
+			'error_reporting' => 2,
 			'journal' => 'archives.log', // 日志文件
 			'folder' => 'file/', // 下载目录
 			'down_part_size' => 1024 * 64, // 下载分块大小
@@ -85,7 +88,7 @@ class config
 			'set_time_limit' => 300, // 允许脚本运行的时间，单位为秒
 			'cookie_cache_time' => 60*60*24*3, // 3 Days
 			'avliable_lang' => array('cn', 'en'), // 可选语言
-			'version' => '0.4'
+			'version' => '0.5'
 			);
 		$data = false;
 		$this->filename = $my_self;
@@ -176,6 +179,12 @@ function ml($tag)
 	$en['setpwd'] = 'Set new password';
 	$en['new_pwd_miss'] = 'Different new pass';
 	$en['cancel'] = 'Cancel';
+	$en['fl_key'] = 'List downloaded';
+	$en['fl_name'] = 'Name';
+	$en['fl_modtime'] = 'Last Modified';
+	$en['fl_size'] = 'Size';
+	$en['fl_delete'] = 'Delete';
+	$en['fl_action'] = 'Action';
 
 	// Chinese
 	$cn['language'] = 'Chinese';
@@ -220,6 +229,12 @@ function ml($tag)
 	$cn['setpwd'] = '设置新密码';
 	$cn['new_pwd_miss'] = '两次输入的新密码不同';
 	$cn['cancel'] = '取消';
+	$cn['fl_key'] = '列出下载项';
+	$cn['fl_name'] = '文件名';
+	$cn['fl_modtime'] = '修改时间';
+	$cn['fl_size'] = '大小';
+	$cn['fl_delete'] = '删除';
+	$cn['fl_action'] = '操作';
 
 	$lang_ = $$lang; // 把变量$lang的值作为变量名
 	if (isset($lang_[$tag])) {
@@ -310,15 +325,18 @@ if (isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']) {
 	if (isset($_POST['key']) && md5($_POST['key']) == $auth_pass) {
 		$_SESSION['login'] = true;
 		setcookie("loggedon", $auth_pass, 0, "/");
-		// $debug_1 .= 'login';
 	} // isset($_POST['key']) && md5($_POST['key']) == $auth_pass
 
 	// 退出
 	if ((isset($_POST['url']) && $_POST['url'] == $exit) || (isset($_POST['url']) && md5($_POST['url']) == $exit)) {
 		setcookie($cookie_login, '', time()-$cookie_cache_time);
 		$_SESSION['login'] = false;
-		// $debug_1 .= 'logout';
-	} // isset($_POST['url']) && $_POST['url'] == $exit
+	} // (isset($_POST['url']) && $_POST['url'] == $exit) || (isset($_POST['url']) && md5($_POST['url']) == $exit)
+
+	// 列出下载项
+	if ((isset($_POST['url']) && $_POST['url'] == $fl_key)) {
+		$todo = "list";
+	} // (isset($_POST['url']) && $_POST['url'] == $fl_key)
 
 	// 修改密码
 	if (isset($_POST['oldkey']) && isset($_POST['newkey']) && md5($_POST['oldkey']) == $auth_pass) {
@@ -347,19 +365,19 @@ if ($_SESSION['login'] == true) {
 // 控制地址长度
 function query()
 {
-	if (input_form.url.value.length < 4)
+	if (input_form.url.value.length<4)
 	{
-		if (input_form.url.value.length > 0)
+		if (input_form.url.value.length>0)
 		{
 			alert(<?php echo "\"", ml('alert_url'), "\""; ?>);
 			input_form.url.focus();
-			$("infotable").style.display = "none";
+			$("infotable").style.display="none";
 		}
 		else
 		{
 			if (confirm("<?php echo ml('confirm_exit');?>"))
 			{
-				input_form.url.value = "exit";
+				input_form.url.value="exit";
 				input_form.submit();
 			}
 		}
@@ -369,6 +387,20 @@ function query()
 		input_form.submit();
 	}
 }
+// 显示文件列表
+function genlist()
+{
+	input_form.url.value="<?php echo $fl_key;?>";
+	input_form.submit();
+}
+// 删除文件
+function request_delete(file)
+{
+	if (confirm("<?php echo ml('fl_delete');?> "+file+"?"))
+	{
+		input_form.url.value=file;
+	}
+}
 // 文件长度
 var filesize=0;
 // 显示文件长度
@@ -376,7 +408,7 @@ function setFileSize(len)
 {
 	filesize=len;
 	$("filesize").innerHTML=len;
-	$("infotable").style.display = "";
+	$("infotable").style.display="";
 }
 // 显示已下载量并计算百分比
 function setDownloaded(len)
@@ -439,26 +471,26 @@ function setnewpwd()
 }
 function reset(s)
 {
-	if (s == 1)
+	if (s==1)
 	{
-		$("login_form").style.display = "none";
-		$("reset_form").style.display = "";
+		$("login_form").style.display="none";
+		$("reset_form").style.display="";
 	}
 	else
 	{
-		$("login_form").style.display = "";
-		$("reset_form").style.display = "none";
+		$("login_form").style.display="";
+		$("reset_form").style.display="none";
 	}
 }
 function autoresize()
 {
-	$("key").style.width = $("query").parentNode.clientWidth*0.5-$("query").clientWidth*2+"px";
+	$("key").style.width=$("query").parentNode.clientWidth*0.5-$("query").clientWidth*2+"px";
 }
 <?php
 } // $_SESSION['login'] == false
 ?>
-window.onload = autoresize;
-window.onresize = autoresize;
+window.onload=autoresize;
+window.onresize=autoresize;
 </script>
 <style type="text/css">
 * {
@@ -567,12 +599,39 @@ padding:3px;
 div.center {
 text-align:center;
 }
+div.list {
+max-width:80%;
+margin:0 auto;
+background-color:#FFFFCC;
+border-top:1px solid #646464;
+border-bottom:1px solid #646464;
+padding:6px 12px;
+font-size:12pt;
+}
+table.list {
+width:100%;
+}
+tr.even {background-color:#C7EDCC;}
+tr.odd {background-color:#CDFFCC;}
+td.l,th.l {text-align:left;padding:0 0;}
+td.r,th.r {text-align:right;padding:0 0;}
 </style>
 </head>
 
 <body>
 <div class="title">
-	<h1 align="center"><?php echo ml('title'); ?><sup><?php echo ml('sub_title'); ?></sup></h1>
+<h1 align="center"><?php echo ml('title'); ?><sup>
+<?php
+if ($_SESSION['login'] == true) {
+?>
+<a href="javascript:" onclick="genlist()"><?php echo ml('sub_title'); ?></a>
+<?php
+} // $_SESSION['login'] == true
+else {
+echo ml('sub_title');
+}
+?>
+</sup></h1>
 </div>
 
 <?php
@@ -580,12 +639,115 @@ if ($_SESSION['login'] == true) {
 ?>
 <form method="post" name="input_form" id="input_form" style="display:none;">
 	<div class="center">
-		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" style="display:none" />
+		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 		<?php echo ml('url'); ?>: <input name="url" id="url" type="text" placeholder="<?php echo ml('warn_to_url'); ?>" />
 		<a href="javascript:" class="btn btn-default" id="query" onclick="query()"><?php echo ml('go'); ?></a>
 	</div>
 <br />
 </form>
+
+<?php
+	if (isset($todo) && $todo == "list") {
+?>
+<div class="list">
+<table class="list" id="filelist" cellpadding="0" cellspacing="0" border="0" margin-left="12">
+	<tr>
+		<th class="l"><?php echo ml('fl_name'); ?></th>
+
+		<th class="r"><?php echo ml('fl_modtime'); ?></th>
+
+		<th class="r"><?php echo ml('fl_size'); ?></th>
+
+		<th class="r"><?php echo ml('fl_action'); ?></th>
+	</tr>
+
+<?php
+		// 加载隐藏项列表
+		if (file_exists($hidden_cfg)) {
+			$hidden_files = array_map("strtolower", array_map("rtrim", file($hidden_cfg)));
+			array_push($hidden_files, $hidden_cfg);
+		} else {
+			$hidden_files = array();
+		} // file_exists($hidden_cfg)
+
+		$filelist = array();
+		if ($dir = @opendir($folder)) {
+			while (($item = readdir($dir)) !== false) {
+				if (!in_array(strtolower($item), $hidden_files)) {
+					if (is_file($folder . $item)) {
+						if ($hide_dotfiles) { // 不列出隐藏文件
+							if (substr($item, 0, 1) == "." or substr($item, -1) == "~") {
+									continue;
+							}
+						} // $hide_dotfiles
+						$filelist[] = array(
+							'name'=> $item,
+							'size'=> filesize($folder . $item),
+							'modtime'=> filemtime($folder . $item)
+						);
+					} // is_file($folder . $item)
+				} // !in_array(strtolower($item), $hidden_files)
+			} // ($item = readdir($dir)) !== false
+			closedir($dir);
+		} // $dir = @opendir($folder)
+
+		// 按日期降序排序
+		// array_multisort("modtime", SORT_DESC, $filelist);
+		// die(var_dump($filelist));
+
+		// This function returns the file size of a specified $file.
+		function format_bytes($size, $precision=0) {
+			$sizes = array('YB', 'ZB', 'EB', 'PB', 'TB', 'GB', 'MB', 'KB', 'B');
+			$total = count($sizes);
+
+			while($total-- && $size > 1024) $size /= 1024;
+			return sprintf('%.'.$precision.'f', $size).$sizes[$total];
+		}
+/*
+		function getServerURL() {
+			if (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] == "on") {
+				$url = "https://" . $_SERVER["SERVER_NAME"]; // $_SERVER["HTTP_HOST"] is equivalent
+				if ($_SERVER["SERVER_PORT"] != "443") {
+					$url .= ":" . $_SERVER["SERVER_PORT"];
+				}
+			}
+			else {
+				$url = "http://" . $_SERVER["SERVER_NAME"]; // $_SERVER["HTTP_HOST"] is equivalent
+				if ($_SERVER["SERVER_PORT"] != "80") {
+					$url .= ":" . $_SERVER["SERVER_PORT"];
+				}
+			}
+			return $url . "/";
+		}
+		$svr_url = getServerURL();
+*/
+		$backgroundcolor = 0;
+		// 输出文件列表
+		foreach($filelist as $file) {
+			if ($backgroundcolor % 2) {
+				echo '<tr class="even">';
+			} else {
+				echo '<tr class="odd">';
+			}
+			$backgroundcolor += 1;
+			echo '<td class="l"><a href="', /*$svr_url,*/ $folder, rawurlencode($file["name"]). '"download>', htmlentities($file["name"], ENT_NOQUOTES), '</a></td>';
+			echo '<td class="r">' , date('Y-m-d H:i:s', $file['modtime']), '</td>';
+			echo '<td class="r">', format_bytes($file["size"], 2), '</td>';
+			echo '<td class="r"><a href="javascript:" onclick="request_delete(\'', rawurlencode($file["name"]), '\')">', ml('fl_delete'), '</a></td>';
+			echo "</tr>";
+		} // $filelist as $file
+?>
+</table>
+
+<form method="post" target="url" name="delete_form" id="delete_form">
+	<input name="target" value="" type="hidden" />
+</form>
+
+</div>
+<?php
+	} // $todo == "list"
+?>
+
 <table border="1" width="80%" align="center" class="i" id="infotable" style="display:none;">
 	<tr>
 		<th><?php echo ml('file_size'); ?></th>
@@ -606,12 +768,17 @@ if ($_SESSION['login'] == true) {
 			<option value="en">English</option>
 		</select>
 		<a href="javascript:" class="btn btn-default" id="lang" onclick="setlang()">SELECT</a>
-		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" style="display:none" />
+		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 	</form>
 </div>
 
 <?php
-	$url = isset($_POST['url'])? $_POST['url']: null;
+	if (isset($todo) && $todo == "list") {
+		$url = null;
+	} // $todo == "list"
+	else {
+		$url = isset($_POST['url'])? $_POST['url']: null;
+	}
 	if ($url == null) {
 		// $alert = "<script>alert('" . $language['alert_url'] ."');</script>";
 		// die($alert);
@@ -658,27 +825,27 @@ if ($_SESSION['login'] == true) {
 					ob_flush();
 					flush();
 				} // !feof($remote_file)
+				fclose($local_file);
 			} // $local_file
-		} // $remote_file
 
-		if ($remote_file) {
 			fclose($remote_file);
+
+			// 停止计时
+			$runtime->stop();
+
+			// 总结
+			$dldone  = '<p><span class="info">' . ml('complete') . date("Y-m-d H:i:s") . '</span></p>';
+			$summary = '<p>' . ml('spantime') . ': <span class="sum"> ' . $runtime->spent('0') . ' </span>' . ml('second_file_size') . ': <span class="sum"> ' . $filesize . ' </span>' . ml('byte') . '</p>';
+
+			// 记录日志
+			$logs = ml('query_file') . ': ' . $url . "\r\n" . ml('spantime') . ": " . $runtime->spent('1') . ml('ms_file_size') . ": " . $headers["Content-Length"] . ml('byte');
+
+			$record_result = recoder($logs);
 		} // $remote_file
-
-		if ($local_file) {
-			fclose($local_file);
-		} // $local_file
-
-		// 停止计时
-		$runtime->stop();
-
-		// 总结
-		$dldone  = '<p><span class="info">' . ml('complete') . date("Y-m-d H:i:s") . '</span></p>';
-		$summary = '<p>' . ml('spantime') . ': <span class="sum"> ' . $runtime->spent('0') . ' </span>' . ml('second_file_size') . ': <span class="sum"> ' . $filesize . ' </span>' . ml('byte') . '</p>';
-
-		// 记录日志
-		$logs = ml('query_file') . ': ' . $url . "\r\n" . ml('spantime') . ": " . $runtime->spent('1') . ml('ms_file_size') . ": " . $headers["Content-Length"] . ml('byte') . "\r\n" . ml('query_time') . ': ' . date("Y-m-d H:i:s") . "\r\n" . "\r\n";
-		$record_result = recoder($logs);
+		else {
+			$record_result = "open [" . $url . "] failed" . "\r\nquery time: " . date("Y-m-d H:i:s") . "\r\n" . "\r\n";
+			recoder($record_result);
+		}
 
 		echo "<div class='footer'>", $summary, $dldone, $record_result, "</div>";
 	} // $url != null
@@ -694,7 +861,7 @@ setcookie($cookie_login, $fromhash, time()+$cookie_cache_time);
 ?>
 <form method="post" name="login_form" id="login_form">
 	<div class="center">
-		<input name="fromhash" value="<?php echo $fromhash; ?>" style="display:none" />
+		<input name="fromhash" value="<?php echo $fromhash; ?>" type="hidden" />
 		<a href="javascript:" id="reset" onclick="reset(1)"><?php echo ml('key'); ?></a>: <input name="key" id="key" type="password" />
 		<a href="javascript:" class="btn btn-default" id="query" onclick="login()"><?php echo ml('login'); ?></a>
 <?php
@@ -713,7 +880,7 @@ if (isset($_POST['key']) && md5($_POST['key'])) {
 </form>
 
 <form method="post" name="reset_form" id="reset_form" style="display:none">
-	<input name="fromhash" value="<?php echo $fromhash; ?>" style="display:none" />
+	<input name="fromhash" value="<?php echo $fromhash; ?>" type="hidden" />
 
 	<table align="center">
 		<tr>
