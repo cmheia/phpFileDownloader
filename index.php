@@ -1,5 +1,5 @@
 <?php
-//a:15:{s:4:"lang";s:2:"cn";s:9:"auth_pass";s:32:"d41d8cd98f00b204e9800998ecf8427e";s:4:"exit";s:4:"exit";s:6:"fl_key";s:4:"list";s:10:"hidden_cfg";s:7:".hidden";s:13:"hide_dotfiles";i:0;s:15:"error_reporting";i:2;s:7:"journal";s:12:"archives.log";s:6:"folder";s:5:"file/";s:14:"down_part_size";i:65536;s:12:"cookie_login";s:12:"cookie_login";s:14:"set_time_limit";i:300;s:17:"cookie_cache_time";i:259200;s:13:"avliable_lang";a:2:{i:0;s:2:"cn";i:1;s:2:"en";}s:7:"version";s:3:"0.5";}
+//a:17:{s:4:"lang";s:2:"cn";s:9:"auth_pass";s:32:"d41d8cd98f00b204e9800998ecf8427e";s:4:"exit";s:4:"exit";s:6:"fl_key";s:4:"list";s:10:"hidden_cfg";s:7:".hidden";s:13:"hide_dotfiles";i:0;s:15:"error_reporting";i:2;s:7:"journal";s:12:"archives.log";s:6:"folder";s:5:"file/";s:14:"down_part_size";i:65536;s:9:"_fromhash";s:8:"fromhash";s:12:"cookie_logon";s:5:"logon";s:11:"cookie_lang";s:8:"tmp_lang";s:14:"set_time_limit";i:300;s:17:"cookie_cache_time";i:259200;s:13:"avliable_lang";a:2:{i:0;s:2:"cn";i:1;s:2:"en";}s:7:"version";s:3:"0.5";}
 /*--------------------------------------------------
  | PHP FILE DOWNLOADER
  +--------------------------------------------------
@@ -43,7 +43,6 @@
  +--------------------------------------------------
 */
 
-// session_id($_COOKIE[$cookie_login]);
 session_start(); // session_start() 函数必须位于 <html> 标签之前
 
 $doc_root = str_replace('//','/',str_replace(DIRECTORY_SEPARATOR,'/',$_SERVER["DOCUMENT_ROOT"]));
@@ -84,7 +83,9 @@ class config
 			'journal' => 'archives.log', // 日志文件
 			'folder' => 'file/', // 下载目录
 			'down_part_size' => 1024 * 64, // 下载分块大小
-			'cookie_login' => 'cookie_login', // 暂未使用
+			'_fromhash' => 'fromhash', // 来路验证
+			'cookie_logon' => 'logon', // 已登录标识
+			'cookie_lang' => 'tmp_lang', // 临时界面语言
 			'set_time_limit' => 300, // 允许脚本运行的时间，单位为秒
 			'cookie_cache_time' => 60*60*24*3, // 3 Days
 			'avliable_lang' => array('cn', 'en'), // 可选语言
@@ -248,6 +249,9 @@ function ml($tag)
 	}
 } // function et($tag)
 
+// +--------------------------------------------------
+// | Runtime Class
+// +--------------------------------------------------
 class runtime
 {
 	var $StartTime = 0;
@@ -271,6 +275,9 @@ class runtime
 	}
 } // class runtime
 
+// +--------------------------------------------------
+// | Journal System
+// +--------------------------------------------------
 function recoder($message)
 {
 	$result = "";
@@ -307,51 +314,141 @@ function recoder($message)
 	return $result;
 } // function recoder($message)
 
-if (isset($_SESSION['login']) && $_SESSION['login'] == true) {
-	$newlang = isset($_POST['newlang'])? $_POST['newlang']: null;
-	if ($newlang != null && in_array($newlang, $avliable_lang, true)) {
-		if (isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']) {
-			$lang = $newlang;
-			$cfg->data['lang'] = $newlang;
-			$cfg->save(); // 修改语言
-		} else {
-			// echo var_dump($newlang);
-			die(ml('unknown_error'));
-		}
-	} // $newlang != null && array_key_exists($newlang, $avliable_lang) && isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']
-} // isset($_SESSION['login']) && $_SESSION['login'] == true
+$debug_on = !true;
+$debug_log = "";
+function debug_print($msg) {
+	global $debug_on, $debug_log;
+	if ($debug_on) {
+		echo "<pre>", $msg, "\n", $debug_log;
+		echo "\n_SESSION\n";
+		echo var_dump($_SESSION);
+		echo "\n_COOKIE\n";
+		echo var_dump($_COOKIE);
+		echo "</pre>";
+	}
+}
 
+// +--------------------------------------------------
+// | Interface
+// +--------------------------------------------------
+if (isset($_COOKIE[$cookie_lang]) && in_array($_COOKIE[$cookie_lang], $avliable_lang, true)) {
+	$lang = $_COOKIE[$cookie_lang];
+}
+
+$user_is_logon = (isset($_SESSION['is_logon']) && $_SESSION['is_logon'] == true);
+$todo = "download";
+// $debug_log .= "init:";
+// $debug_log .= $user_is_logon?"user_is_logon\n":"user_not_logon\n";
+// +--------------------------------------------------
+// | Actions
+// +--------------------------------------------------
 if (isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']) {
+	if ($user_is_logon) {
+		// 退出
+		if (isset($_POST['url']) && $_POST['url'] == $exit) {
+			$user_is_logon = false;
+			// setcookie($cookie_logon, "", time()-$cookie_cache_time, "/", $_SERVER["SERVER_NAME"]); // $_SERVER["HTTP_HOST"] is equivalent
+			$_SESSION['is_logon'] = false;
+			$todo = "exit";
+		} // isset($_POST['url']) && md5($_POST['url']) == $exit
 
-	// 登录
-	if (isset($_POST['key']) && md5($_POST['key']) == $auth_pass) {
-		$_SESSION['login'] = true;
-		setcookie("loggedon", $auth_pass, 0, "/");
-	} // isset($_POST['key']) && md5($_POST['key']) == $auth_pass
+		// 列出下载项
+		if ((isset($_POST['url']) && $_POST['url'] == $fl_key)) {
+			$todo = "list";
+		} // (isset($_POST['url']) && $_POST['url'] == $fl_key)
 
-	// 退出
-	if ((isset($_POST['url']) && $_POST['url'] == $exit) || (isset($_POST['url']) && md5($_POST['url']) == $exit)) {
-		setcookie($cookie_login, '', time()-$cookie_cache_time);
-		$_SESSION['login'] = false;
-	} // (isset($_POST['url']) && $_POST['url'] == $exit) || (isset($_POST['url']) && md5($_POST['url']) == $exit)
+		// 下载文件
+		if ($todo == "download" && isset($_POST['url']) && $_POST['url'] != null) {
+			$url = $_POST['url'];
+			// 开始计时
+			$runtime = new runtime;
+			$runtime->start();
 
-	// 列出下载项
-	if ((isset($_POST['url']) && $_POST['url'] == $fl_key)) {
-		$todo = "list";
-	} // (isset($_POST['url']) && $_POST['url'] == $fl_key)
+			// 检查下载目录
+			if (!is_dir($folder)) {
+				mkdir($folder, 0777);
+			}
 
-	// 删除指定文件
-	if (isset($_POST['delete_file'])) {
-		if (substr($_POST['delete_file'], 0, 6) == "index.") {
-			die("forbidden!");
-		}
-		else {
-			$delete_result = unlink($folder . $_POST['delete_file'])? ml('success'): ml('fail');
-			echo ml('fl_delete'), " [", $_POST['delete_file'], "] ", $delete_result;
-			die();
-		}
-		$todo = "list";
-	} // (isset($_POST['delete_file']) && substr($_POST['delete_file'], 0, 6) == "index.")
+			// 开始下载
+			$remote_file = fopen($url, "rb");
+			if ($remote_file) {
+				// 获取文件大小
+				$filesize = -1;
+				$headers  = get_headers($url, 1);
+				if (array_key_exists("Content-Length", $headers)) {
+					$filesize = $headers["Content-Length"];
+				} else {
+					$filesize = 0;
+				} // array_key_exists("Content-Length", $headers)
+
+				// 不是所有的文件都会先返回大小的，
+				// 有些动态页面不先返回总大小，这样就无法计算进度了
+				if ($filesize != -1) {
+					echo "<script>setFileSize($filesize);</script>"; // 前台显示文件大小
+				} // $filesize != -1
+
+				$new_file = $folder . basename($url);
+				$local_file  = fopen($new_file, "wb");
+				$total_len   = 0;
+				$current_len = 0;
+				if ($local_file) {
+					while (!feof($remote_file)) {
+						$current_part = fread($remote_file, $down_part_size); // 分块下载
+						$current_len  = strlen($current_part); // 本次下载的字节数
+						$total_len   += $current_len; // 累计已经下载的字节数
+						fwrite($local_file, $current_part, $current_len); // $down_part_size ?
+						echo "<script>setDownloaded($total_len);</script>"; // 前台显示下载进度
+						ob_flush();
+						flush();
+					} // !feof($remote_file)
+					fclose($local_file);
+				} // $local_file
+
+				fclose($remote_file);
+
+				// 停止计时
+				$runtime->stop();
+
+				// 总结
+				$dldone  = '<p><span class="info">' . ml('complete') . date("Y-m-d H:i:s") . '</span></p>';
+				$summary = '<p>' . ml('spantime') . ': <span class="sum"> ' . $runtime->spent('0') . ' </span>' . ml('second_file_size') . ': <span class="sum"> ' . $filesize . ' </span>' . ml('byte') . '</p>';
+
+				// 记录日志
+				$logs = ml('query_file') . ': ' . $url . "\r\n" . ml('spantime') . ": " . $runtime->spent('1') . ml('ms_file_size') . ": " . $headers["Content-Length"] . ml('byte');
+
+				$record_result = recoder($logs);
+			} // $remote_file
+			else {
+				$record_result = "open [" . $url . "] failed" . "\r\nquery time: " . date("Y-m-d H:i:s") . "\r\n" . "\r\n";
+				recoder($record_result);
+			}
+
+				echo "<div class='footer'>", $summary, $dldone, $record_result, "</div>";
+		} // !(isset($todo) && $todo == "list") &&	isset($_POST['url']) && $_POST['url'] != null
+
+		// 删除指定文件
+		if (isset($_POST['delete_file'])) {
+			if (substr($_POST['delete_file'], 0, 6) == "index.") {
+				die("forbidden!");
+			} // substr($_POST['delete_file'], 0, 6) == "index."
+			else {
+				$delete_result = unlink($folder . $_POST['delete_file'])? ml('success'): ml('fail');
+				echo ml('fl_delete'), " [", $_POST['delete_file'], "] ", $delete_result;
+				die();
+			}
+			$todo = "list";
+		} // isset($_POST['delete_file'])
+
+	} // $user_is_logon
+	else {
+		// 登录
+		if (isset($_POST['key']) && md5($_POST['key']) == $auth_pass) {
+			$user_is_logon = true;
+			// setcookie($cookie_logon, $auth_pass, time()+$cookie_cache_time, "/", $_SERVER["SERVER_NAME"]); // $_SERVER["HTTP_HOST"] is equivalent
+			$_SESSION['is_logon'] = true;
+		} // isset($_POST['key']) && md5($_POST['key']) == $auth_pass
+
+	} // !$user_is_logon
 
 	// 修改密码
 	if (isset($_POST['oldkey']) && isset($_POST['newkey']) && md5($_POST['oldkey']) == $auth_pass) {
@@ -359,10 +456,34 @@ if (isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']) {
 		if ($cfg->data['auth_pass'] != $auth_pass) {
 			$cfg->data['auth_pass'] = $auth_pass;
 			$cfg->save(); // 修改密码
+			$user_is_logon = false;
 		} // $cfg->data['auth_pass'] != $auth_pass
 	} // isset($_POST['oldkey']) && isset($_POST['newkey']) && md5($_POST['oldkey']) == $auth_pass
+
+	// 多语言切换
+	// todo: 使用 cookies 配置（登录页面）显示语言，登录后若有修改再覆盖
+	$newlang = isset($_POST['newlang'])? $_POST['newlang']: null;
+	if ($newlang != null && in_array($newlang, $avliable_lang, true)) {
+		$lang = $newlang;
+		setcookie($cookie_lang, $lang, 0, "/", $_SERVER["SERVER_NAME"]);
+		if ($user_is_logon) { // 登录后才保存语言设置
+			$cfg->data['lang'] = $lang;
+			$cfg->save(); // 修改语言
+		}
+	} // $newlang != null && array_key_exists($newlang, $avliable_lang, true)
 } // isset($_POST['fromhash']) && $_POST['fromhash'] == $_SESSION['fromhash']
 
+// 为用户登录准备新的标识
+if (!$user_is_logon) {
+	srand(microtime(true));
+	$newfromhash = md5(rand());
+	$_SESSION['fromhash'] = $newfromhash;
+	setcookie($_fromhash, $newfromhash, time()+$cookie_cache_time, "/", $_SERVER["SERVER_NAME"]); // $_SERVER["HTTP_HOST"] is equivalent
+} // !$user_is_logon
+
+// $debug_log .= "again:";
+// $debug_log .= $user_is_logon?"user_is_logon\n":"user_not_logon\n";
+debug_print($_SERVER["SERVER_NAME"]);
 ?>
 <!DOCTYPE HTML>
 <html>
@@ -375,7 +496,7 @@ function $(obj)
 	return document.getElementById(obj);
 }
 <?php
-if ($_SESSION['login'] == true) {
+if ($user_is_logon) { // 内页使用的javascript
 ?>
 // 控制地址长度
 function query()
@@ -446,6 +567,11 @@ function setDownloaded(len)
 
 	}
 }
+function autoresize()
+{
+	$("input_form").style.display="";
+	$("url").style.width=$("query").parentNode.clientWidth-$("query").clientWidth*3+"px";
+}
 // 设置语言
 function setlang()
 {
@@ -454,15 +580,16 @@ function setlang()
 		lang_form.submit();
 	}
 }
-function autoresize()
-{
-	$("input_form").style.display="";
-	$("url").style.width=$("query").parentNode.clientWidth-$("query").clientWidth*3+"px";
-}
 <?php
-} // $_SESSION['login'] == true
+} // $user_is_logon
 else {
+	// 登录页使用的javascript
 ?>
+// 登录页切换语言不确认
+function setlang()
+{
+	lang_form.submit();
+}
 // 登陆
 function login()
 {
@@ -503,7 +630,7 @@ function autoresize()
 	$("key").style.width=$("query").parentNode.clientWidth*0.5-$("query").clientWidth*2+"px";
 }
 <?php
-} // $_SESSION['login'] == false
+} // if(isset($_SESSION['is_logon']) && $_SESSION['is_logon'] == true)else
 ?>
 window.onload=autoresize;
 window.onresize=autoresize;
@@ -640,20 +767,30 @@ td.r,th.r {text-align:right;padding:0 0;}
 <div class="title">
 <h1 align="center"><?php echo ml('title'); ?><sup>
 <?php
-if ($_SESSION['login'] == true) {
+if ($user_is_logon) { // 登录后提供列出目录入口
 ?>
 <a href="javascript:" onclick="genlist()"><?php echo ml('sub_title'); ?></a>
 <?php
-} // $_SESSION['login'] == true
+} // $user_is_logon
 else {
-echo ml('sub_title');
+	echo ml('sub_title');
 }
 ?>
 </sup></h1>
 </div>
 
+<div class="lang">
+	<form method="post" name="lang_form" id="lang_form" align="center">
+		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
+		<select name="newlang" onchange="setlang()">
+			<option value="cn" <?php if ($lang == "cn") {echo "selected=\"selected\"";} ?>>简体中文</option>
+			<option value="en" <?php if ($lang == "en") {echo "selected=\"selected\"";} ?>>English</option>
+		</select>
+	</form>
+</div>
+
 <?php
-if ($_SESSION['login'] == true) {
+if ($user_is_logon) { // 登录后才能使用下载功能
 ?>
 <form method="post" name="input_form" id="input_form" style="display:none;">
 	<div class="center">
@@ -783,106 +920,13 @@ if ($_SESSION['login'] == true) {
 	</tr>
 </table>
 
-<div class="lang">
-	<form method="post" name="lang_form" id="lang_form" align="center">
-		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
-		<select name="newlang" onchange="setlang()">
-			<option value="cn" <?php if ($lang == "cn") {echo "selected=\"selected\"";} ?>>简体中文</option>
-			<option value="en" <?php if ($lang == "en") {echo "selected=\"selected\"";} ?>>English</option>
-		</select>
-	</form>
-</div>
-
 <?php
-	if (isset($todo) && $todo == "list") {
-		$url = null;
-	} // $todo == "list"
-	else {
-		$url = isset($_POST['url'])? $_POST['url']: null;
-	}
-	if ($url == null) {
-		// $alert = "<script>alert('" . $language['alert_url'] ."');</script>";
-		// die($alert);
-	} // $url == null
-	else {
-		// 开始计时
-		$runtime = new runtime;
-		$runtime->start();
-
-		// 检查下载目录
-		if (!is_dir($folder)) {
-			mkdir($folder, 0777);
-		}
-
-		// 开始下载
-		$remote_file = fopen($url, "rb");
-		if ($remote_file) {
-			// 获取文件大小
-			$filesize = -1;
-			$headers  = get_headers($url, 1);
-			if (array_key_exists("Content-Length", $headers)) {
-				$filesize = $headers["Content-Length"];
-			} else {
-				$filesize = 0;
-			} // array_key_exists("Content-Length", $headers)
-
-			// 不是所有的文件都会先返回大小的，
-			// 有些动态页面不先返回总大小，这样就无法计算进度了
-			if ($filesize != -1) {
-				echo "<script>setFileSize($filesize);</script>"; // 前台显示文件大小
-			} // $filesize != -1
-
-			$new_file = $folder . basename($url);
-			$local_file  = fopen($new_file, "wb");
-			$total_len   = 0;
-			$current_len = 0;
-			if ($local_file) {
-				while (!feof($remote_file)) {
-					$current_part = fread($remote_file, $down_part_size); // 分块下载
-					$current_len  = strlen($current_part); // 本次下载的字节数
-					$total_len   += $current_len; // 累计已经下载的字节数
-					fwrite($local_file, $current_part, $current_len); // $down_part_size ?
-					echo "<script>setDownloaded($total_len);</script>"; // 前台显示下载进度
-					ob_flush();
-					flush();
-				} // !feof($remote_file)
-				fclose($local_file);
-			} // $local_file
-
-			fclose($remote_file);
-
-			// 停止计时
-			$runtime->stop();
-
-			// 总结
-			$dldone  = '<p><span class="info">' . ml('complete') . date("Y-m-d H:i:s") . '</span></p>';
-			$summary = '<p>' . ml('spantime') . ': <span class="sum"> ' . $runtime->spent('0') . ' </span>' . ml('second_file_size') . ': <span class="sum"> ' . $filesize . ' </span>' . ml('byte') . '</p>';
-
-			// 记录日志
-			$logs = ml('query_file') . ': ' . $url . "\r\n" . ml('spantime') . ": " . $runtime->spent('1') . ml('ms_file_size') . ": " . $headers["Content-Length"] . ml('byte');
-
-			$record_result = recoder($logs);
-		} // $remote_file
-		else {
-			$record_result = "open [" . $url . "] failed" . "\r\nquery time: " . date("Y-m-d H:i:s") . "\r\n" . "\r\n";
-			recoder($record_result);
-		}
-
-		echo "<div class='footer'>", $summary, $dldone, $record_result, "</div>";
-	} // $url != null
-} // $_SESSION['login'] == true
+} // $user_is_logon
 else {
-// 来路验证
-srand(microtime(true) * 1000);
-$fromhash = rand();
-$session_id = session_id();
-$_SESSION['fromhash'] = $fromhash;
-setcookie($cookie_login, $fromhash, time()+$cookie_cache_time);
-// $debug_1 .= 'login form';
 ?>
 <form method="post" name="login_form" id="login_form">
 	<div class="center">
-		<input name="fromhash" value="<?php echo $fromhash; ?>" type="hidden" />
+		<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 		<a href="javascript:" id="reset" onclick="reset(1)"><?php echo ml('key'); ?></a>: <input name="key" id="key" type="password" />
 		<a href="javascript:" class="btn btn-default" id="query" onclick="login()"><?php echo ml('login'); ?></a>
 <?php
@@ -901,7 +945,7 @@ if (isset($_POST['key']) && md5($_POST['key'])) {
 </form>
 
 <form method="post" name="reset_form" id="reset_form" style="display:none">
-	<input name="fromhash" value="<?php echo $fromhash; ?>" type="hidden" />
+	<input name="fromhash" value="<?php echo $_SESSION['fromhash']; ?>" type="hidden" />
 
 	<table align="center">
 		<tr>
@@ -929,9 +973,8 @@ if (isset($_POST['key']) && md5($_POST['key'])) {
 		</tr>
 	</table>
 </form>
-
 <?php
-} // $_SESSION['login'] == false
+} // if(isset($_SESSION['is_logon']) && $_SESSION['is_logon'] == true)else
 ?>
 </body>
 </html>
